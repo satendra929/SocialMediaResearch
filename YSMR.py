@@ -2,7 +2,7 @@
 
 # Usage example:
 # python comments.py --videoid='<video_id>' --text='<text>'
-
+import string
 import httplib2
 import os
 import sys
@@ -13,8 +13,7 @@ from oauth2client.client import flow_from_clientsecrets
 from oauth2client.file import Storage
 from oauth2client.tools import argparser, run_flow
 
-
-f=io.open("Comments.txt","w+",encoding='utf8')
+f=io.open("TrainingData.txt","w+",encoding='utf-8')
 
 # The CLIENT_SECRETS_FILE variable specifies the name of a file that contains
 
@@ -68,22 +67,52 @@ def get_authenticated_service(args):
     doc = f.read()
     return build_from_document(doc, http=credentials.authorize(httplib2.Http()))
 
-
+def writethreads(results,chname,pro) :
+  for item in results["items"]:
+    comment = item["snippet"]["topLevelComment"]
+    author = comment["snippet"]["authorDisplayName"]
+    text = comment["snippet"]["textDisplay"]
+    #remove punctuation from comments
+    punc=set(string.punctuation)
+    ftweet=""
+    for char in text :
+      if char not in punc :
+        ftweet=ftweet+char
+    lines=ftweet.lower().splitlines()
+    text=' '.join([line.strip() for line in lines])
+    f.write(pro+";"+chname+";"+author+";"+text+"\n")
+    #print "Comment by %s: %s" % (author, text)
+  
 # Call the API's commentThreads.list method to list the existing comment threads.
 def get_comment_threads(youtube, video_id,chname,pro):
+  idlist=[]
   results = youtube.commentThreads().list(part="snippet",
     videoId=video_id,
     textFormat="plainText",
     maxResults=100
   ).execute()
-  for item in results["items"]:
-    comment = item["snippet"]["topLevelComment"]
-    author = comment["snippet"]["authorDisplayName"]
-    text = comment["snippet"]["textDisplay"]
-    f.write(pro+";"+chname+";"+author+";"+text+"\n")
-    #print "Comment by %s: %s" % (author, text)
-
-  return results["items"]
+  writethreads(results,chname,pro)
+  for i in range(len(results["items"])) :
+    idlist.append(results["items"][i]["id"])
+  if "nextPageToken" in results.keys() :
+    pt=results["nextPageToken"]
+    np=True
+  else :
+    np=False
+  while np :
+    results = youtube.commentThreads().list(part="snippet",
+      videoId=video_id,
+      textFormat="plainText",
+      pageToken=pt,
+      maxResults=100).execute()
+    writethreads(results,chname,pro)
+    for i in range (len(results["items"])) :
+      idlist.append(results["items"][i]["id"])
+    if "nextPageToken" in results.keys() :
+      pt=results["nextPageToken"]
+    else :
+      np=False
+  return idlist
 
 
 # Call the API's comments.list method to list the existing comment replies.
@@ -97,12 +126,20 @@ def get_comments(youtube, parent_id,chname,pro):
   for item in results["items"]:
     author = item["snippet"]["authorDisplayName"]
     text = item["snippet"]["textDisplay"]
+    #remove punctuation from comments
+    punc=set(string.punctuation)
+    ftweet=""
+    for char in text :
+      if char not in punc :
+        ftweet=ftweet+char
+    lines=ftweet.lower().splitlines()
+    text=' '.join([line.strip() for line in lines])
     f.write(pro+";"+chname+";"+author+";"+text+"\n")
     #print "Comment by %s: %s" % (author, text)
-
   return results["items"]
 
 if __name__ == "__main__":
+  cccount=0
   # The "videoid" option specifies the YouTube video ID that uniquely
   # identifies the video for which the comment will be inserted.
   argparser.add_argument("--videoid",
@@ -121,17 +158,19 @@ if __name__ == "__main__":
   try:
     vid={'iPhoneX':("j8wTNuviku0 MrMobile"),
          'SamsungGalaxyNote8':("LVup8cO7rPQ MrMobile"),
-         'LGV30':("tbdrA_2vASw MrMobile"),
-         'EssentialPhone':("xywcBJuV7tk MrMobile"),
-         'MotoZ2Force':("emQ6RChmdR8 MrMobile"),
-         'OnePlus5':("gxkHHxYrMWw MrMobile"),
-         'HTCU11':("lad1V4W_rmI MrMobile")
+         'LGV30':("tbdrA_2vASw MrMobile")
          }
+##    vid={'EssentialPhone':("xywcBJuV7tk MrMobile"),
+##         'MotoZ2Force':("emQ6RChmdR8 MrMobile"),
+##         'OnePlus5':("gxkHHxYrMWw MrMobile"),
+##         'HTCU11':("lad1V4W_rmI MrMobile")}
+##    vid={'iPhoneX':("j8wTNuviku0 MrMobile")}
+    #j8wTNuviku0
     for key , value in vid.iteritems() :
       tempv=value.split(" ")
       video_comment_threads = get_comment_threads(youtube,tempv[0],tempv[1],key)
       for i in range (0,len(video_comment_threads)) :
-        parent_id = video_comment_threads[i]["id"]
+        parent_id = video_comment_threads[i]
         video_comments = get_comments(youtube, parent_id,tempv[1],key)
     f.close()
   except HttpError, e:
